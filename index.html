@@ -1,238 +1,131 @@
-al<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editor CSV con GitHub API</title>
+    <title>Editor CSV Seguro</title>
+    <!-- Usar HTTPS para evitar problemas de mixed content -->
     <link rel="icon" href="data:,">
     <style>
-        /* (Mantener los mismos estilos del ejemplo anterior) */
+        /* (Mantener los estilos anteriores) */
     </style>
 </head>
 <body>
-    <h1>Editor de Archivo CSV con GitHub</h1>
-    
-    <div class="editor-container">
-        <textarea id="dataInput" placeholder="Escribe tus datos CSV aquí...\nEjemplo:\nNombre,Apellido,Edad\nJuan,Perez,25\nMaria,Gomez,30"></textarea>
-        
-        <div class="button-group">
-            <button id="loadButton">Cargar CSV</button>
-            <button id="saveButton">Guardar CSV</button>
-            <button id="convertJsonButton">Convertir de JSON</button>
-        </div>
-        
-        <div id="status" class="info">
-            Listo para trabajar con archivos CSV
-        </div>
-    </div>
+    <!-- (Mantener la estructura HTML anterior) -->
 
     <script>
-        // Configuración CSV
+        // Configuración
         const CONFIG = {
-            repoOwner: 'FredyNes',
-            repoName: 'Inv3',
+            repoOwner: 'TU_USUARIO_GITHUB',
+            repoName: 'TU_REPOSITORIO',
             fileName: 'datos.csv',
-            defaultContent: 'Modelo,Serial,Fallo,Parte,Estado,Donde'
+            defaultContent: 'Nombre,Apellido,Edad\nEjemplo,Usuario,30'
         };
 
         // Elementos del DOM
         const dataInput = document.getElementById('dataInput');
         const loadButton = document.getElementById('loadButton');
         const saveButton = document.getElementById('saveButton');
-        const convertJsonButton = document.getElementById('convertJsonButton');
         const statusDiv = document.getElementById('status');
 
         // Estado de la aplicación
         let currentSha = null;
         let githubToken = null;
+        let useSessionStorage = false;
 
-        // Event Listeners
-        loadButton.addEventListener('click', loadFileContent);
-        saveButton.addEventListener('click', saveFileContent);
-        convertJsonButton.addEventListener('click', convertJsonToCSV);
+        // Inicialización segura
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Prueba de acceso a storage
+                const testKey = 'storage_test';
+                localStorage.setItem(testKey, testKey);
+                localStorage.removeItem(testKey);
+            } catch (e) {
+                console.warn("localStorage no disponible, usando sessionStorage");
+                useSessionStorage = true;
+            }
 
-        // Cargar contenido al iniciar
-        document.addEventListener('DOMContentLoaded', () => {
-            checkToken();
+            await checkToken();
         });
 
-        // Funciones principales
+        // Gestión del token mejorada
         async function checkToken() {
-            githubToken = localStorage.getItem('github_token');
-            
-            if (!githubToken) {
-                requestToken();
-            } else {
-                await loadFileContent();
-            }
-        }
-
-        function requestToken() {
-            githubToken = prompt("Ingresa tu token de acceso GitHub (con permisos repo):");
-            
-            if (githubToken) {
-                localStorage.setItem('github_token', githubToken);
-                loadFileContent();
-            } else {
-                showStatus("Token requerido. Recarga la página.", "error");
+            try {
+                githubToken = useSessionStorage 
+                    ? sessionStorage.getItem('github_token')
+                    : localStorage.getItem('github_token');
+                
+                if (!githubToken) {
+                    await requestToken();
+                } else {
+                    await loadFileContent();
+                }
+            } catch (error) {
+                showStatus("Error al cargar configuración: " + error.message, "error");
                 dataInput.value = CONFIG.defaultContent;
-                disableButtons();
             }
         }
 
-        async function loadFileContent() {
-            try {
-                showStatus("Cargando CSV...", "info");
-                disableButtons();
-
-                const response = await fetch(
-                    `https://api.github.com/repos/${CONFIG.repoOwner}/${CONFIG.repoName}/contents/${CONFIG.fileName}`,
-                    {
-                        headers: createHeaders(),
-                        credentials: 'omit'
-                    }
-                );
-
-                if (response.ok) {
-                    const fileData = await response.json();
-                    currentSha = fileData.sha;
-                    dataInput.value = decodeBase64(fileData.content);
-                    showStatus("CSV cargado correctamente", "success");
-                } else if (response.status === 404) {
-                    dataInput.value = CONFIG.defaultContent;
-                    currentSha = null;
-                    showStatus("Archivo no encontrado. Se creará uno nuevo al guardar.", "warning");
-                } else {
-                    throw new Error(`Error ${response.status}: ${await response.text()}`);
-                }
-            } catch (error) {
-                showStatus(`Error al cargar: ${error.message}`, "error");
-                console.error(error);
-            } finally {
-                enableButtons();
-            }
-        }
-
-        async function saveFileContent() {
-            const content = dataInput.value.trim();
+        async function requestToken() {
+            showStatus("Se requiere autenticación", "warning");
             
-            if (!content) {
-                showStatus("El contenido no puede estar vacío", "error");
-                return;
-            }
-
-            try {
-                showStatus("Guardando CSV...", "info");
-                disableButtons();
-
-                // Verificar SHA actual
-                const shaResponse = await fetch(
-                    `https://api.github.com/repos/${CONFIG.repoOwner}/${CONFIG.repoName}/contents/${CONFIG.fileName}`,
-                    {
-                        headers: createHeaders(),
-                        credentials: 'omit'
-                    }
-                );
-
-                let latestSha = currentSha;
-                if (shaResponse.ok) {
-                    const fileData = await shaResponse.json();
-                    latestSha = fileData.sha;
-                } else if (shaResponse.status !== 404) {
-                    throw new Error(await shaResponse.text());
-                }
-
-                // Guardar cambios
-                const saveResponse = await fetch(
-                    `https://api.github.com/repos/${CONFIG.repoOwner}/${CONFIG.repoName}/contents/${CONFIG.fileName}`,
-                    {
-                        method: 'PUT',
-                        headers: createHeaders(),
-                        body: JSON.stringify({
-                            message: `Actualización CSV desde editor web - ${new Date().toLocaleString()}`,
-                            content: encodeBase64(content),
-                            sha: latestSha
-                        })
-                    }
-                );
-
-                if (saveResponse.ok) {
-                    const result = await saveResponse.json();
-                    currentSha = result.content.sha;
-                    showStatus("¡CSV guardado correctamente en GitHub!", "success");
-                } else {
-                    const errorData = await saveResponse.json();
-                    throw new Error(errorData.message || "Error desconocido al guardar");
-                }
-            } catch (error) {
-                showStatus(`Error al guardar: ${error.message}`, "error");
-                console.error("Detalles del error:", error);
-                await loadFileContent(); // Recargar para resolver conflictos
-            } finally {
-                enableButtons();
-            }
-        }
-
-        function convertJsonToCSV() {
-            try {
-                const jsonData = JSON.parse(dataInput.value.trim());
-                const csvContent = convertToCSV(jsonData);
-                dataInput.value = csvContent;
-                showStatus("JSON convertido a CSV correctamente", "success");
-            } catch (error) {
-                showStatus("Error al convertir: El contenido no es JSON válido", "error");
-            }
-        }
-
-        // Funciones auxiliares
-        function convertToCSV(data) {
-            if (typeof data === 'string') return data;
+            // Crear interfaz para token sin usar prompt()
+            const tokenDialog = document.createElement('div');
+            tokenDialog.style.position = 'fixed';
+            tokenDialog.style.top = '0';
+            tokenDialog.style.left = '0';
+            tokenDialog.style.width = '100%';
+            tokenDialog.style.height = '100%';
+            tokenDialog.style.backgroundColor = 'rgba(0,0,0,0.5)';
+            tokenDialog.style.display = 'flex';
+            tokenDialog.style.justifyContent = 'center';
+            tokenDialog.style.alignItems = 'center';
+            tokenDialog.style.zIndex = '1000';
             
-            if (Array.isArray(data) && data.length > 0) {
-                const headers = Object.keys(data[0]).join(',');
-                const rows = data.map(obj => 
-                    Object.values(obj).map(value => 
-                        typeof value === 'string' && value.includes(',') ? `"${value}"` : value
-                    ).join(',')
-                );
-                return [headers, ...rows].join('\n');
-            }
+            tokenDialog.innerHTML = `
+                <div style="background: white; padding: 2rem; border-radius: 8px; max-width: 500px;">
+                    <h2 style="margin-top: 0;">Autenticación requerida</h2>
+                    <p>Ingresa tu token de acceso GitHub (con permisos repo):</p>
+                    <input type="password" id="tokenInput" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem;">
+                    <button id="submitToken" style="background: var(--primary); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px;">Enviar</button>
+                    <p><small>Crea un token en <a href="https://github.com/settings/tokens" target="_blank">GitHub Settings</a></small></p>
+                </div>
+            `;
             
-            return JSON.stringify(data); // Fallback
+            document.body.appendChild(tokenDialog);
+            
+            return new Promise((resolve) => {
+                document.getElementById('submitToken').addEventListener('click', () => {
+                    githubToken = document.getElementById('tokenInput').value.trim();
+                    if (githubToken) {
+                        try {
+                            if (useSessionStorage) {
+                                sessionStorage.setItem('github_token', githubToken);
+                            } else {
+                                localStorage.setItem('github_token', githubToken);
+                            }
+                        } catch (e) {
+                            console.warn("No se pudo persistir el token", e);
+                        }
+                        tokenDialog.remove();
+                        loadFileContent();
+                        resolve();
+                    }
+                });
+            });
         }
 
-        function createHeaders() {
-            if (!githubToken) requestToken();
-            return {
-                'Accept': 'application/vnd.github.v3+json',
-                'Content-Type': 'application/json',
-                'Authorization': `token ${githubToken}`
-            };
-        }
-
-        function encodeBase64(str) {
-            return btoa(unescape(encodeURIComponent(str)));
-        }
-
-        function decodeBase64(str) {
-            return decodeURIComponent(escape(atob(str)));
-        }
-
-        function showStatus(message, type) {
-            statusDiv.textContent = message;
-            statusDiv.className = type;
-        }
-
-        function disableButtons() {
-            loadButton.disabled = true;
-            saveButton.disabled = true;
-            convertJsonButton.disabled = true;
-        }
-
-        function enableButtons() {
-            loadButton.disabled = false;
-            saveButton.disabled = false;
-            convertJsonButton.disabled = false;
+        // (Mantener las demás funciones igual que en el ejemplo anterior)
+        // loadFileContent(), saveFileContent(), etc...
+        
+        // Función para verificar HTTPS
+        function ensureSecureContext() {
+            if (window.isSecureContext) {
+                return true;
+            } else {
+                showStatus("Advertencia: No estás en un contexto seguro (HTTPS)", "warning");
+                return false;
+            }
         }
     </script>
 </body>
