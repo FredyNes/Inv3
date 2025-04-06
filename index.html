@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guardar datos en TXT</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Guardar datos en archivo TXT</h1>
+    <p>Ingresa el contenido que deseas guardar:</p>
+    
+    <textarea id="dataInput" placeholder="Escribe aquí tu contenido..."></textarea>
+    <button id="saveButton">Guardar en TXT</button>
+    
+    <div id="status"></div>
+    
+    <script>
+        document.getElementById('saveButton').addEventListener('click', async function() {
+            const content = document.getElementById('dataInput').value;
+            const filename = 'datos.txt';
+            const repoOwner = 'TU_USUARIO_GITHUB'; // Cambia esto
+            const repoName = 'TU_REPOSITORIO'; // Cambia esto
+            const token = 'TU_TOKEN_DE_ACCESO'; // Cambia esto
+            
+            if (!content) {
+                showStatus('Por favor ingresa algún contenido', 'error');
+                return;
+            }
+            
+            try {
+                // Verificar si el archivo ya existe
+                let sha = null;
+                try {
+                    const existingFile = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/${filename}`, {
+                        headers: {
+                            'Authorization': `token ${token}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    });
+                    
+                    if (existingFile.ok) {
+                        const fileData = await existingFile.json();
+                        sha = fileData.sha;
+                    }
+                } catch (e) {
+                    console.log('Archivo no existe o error al verificarlo');
+                }
+                
+                // Crear o actualizar el archivo
+                const response = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/${filename}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: 'Actualización de datos desde la página web',
+                        content: btoa(unescape(encodeURIComponent(content))),
+                        sha: sha
+                    })
+                });
+                
+                if (response.ok) {
+                    showStatus('Datos guardados correctamente en GitHub', 'success');
+                } else {
+                    const error = await response.json();
+                    showStatus(`Error al guardar: ${error.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        });
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = type;
+        }
+    </script>
+</body>
+</html>
