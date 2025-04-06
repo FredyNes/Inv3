@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editor CSV GitHub</title>
+    <title>Editor CSV con GitHub API</title>
     <link rel="icon" href="data:,">
     <style>
         :root {
@@ -191,7 +191,7 @@
             repoOwner: 'FredyNes',
             repoName: 'Inv3',
             fileName: 'datos.csv',
-            defaultContent: 'Modelo,Serial,Fallo,cliente,parte,Estado'
+            defaultContent: 'Nombre,Apellido,Edad,Email\nEjemplo,Usuario,30,ejemplo@test.com'
         };
 
         // Elementos del DOM
@@ -206,17 +206,19 @@
         let currentSha = null;
         let githubToken = null;
         let storageAvailable = true;
+        let isOnline = navigator.onLine;
 
         // Inicialización
         document.addEventListener('DOMContentLoaded', () => {
-            // Verificar si el almacenamiento está disponible
             checkStorageAvailability();
-            
-            // Cargar token si existe
+            setupConnectivityMonitoring();
             loadToken();
-            
-            // Configurar event listeners
             setupEventListeners();
+            
+            // Verificar si fetch está disponible
+            if (typeof window.fetch === 'undefined') {
+                showStatus("Advertencia: Parece que tienes un bloqueador de contenido que puede interferir", "warning");
+            }
         });
 
         // Funciones principales
@@ -230,6 +232,18 @@
                 console.warn('Almacenamiento local no disponible:', e);
                 showStatus("Advertencia: Los ajustes no se guardarán entre sesiones", "warning");
             }
+        }
+
+        function setupConnectivityMonitoring() {
+            window.addEventListener('online', () => {
+                isOnline = true;
+                showStatus("Conexión restablecida", "success");
+            });
+            
+            window.addEventListener('offline', () => {
+                isOnline = false;
+                showStatus("Sin conexión a internet", "error");
+            });
         }
 
         function loadToken() {
@@ -250,6 +264,11 @@
         }
 
         async function loadFileContent() {
+            if (!isOnline) {
+                showStatus("Error: No hay conexión a internet", "error");
+                return;
+            }
+
             if (!githubToken) {
                 await requestToken();
                 if (!githubToken) return;
@@ -259,12 +278,13 @@
                 showStatus("Cargando archivo CSV...", "info");
                 disableButtons();
 
-                const response = await fetch(
+                const response = await fetchWithTimeout(
                     `https://api.github.com/repos/${CONFIG.repoOwner}/${CONFIG.repoName}/contents/${CONFIG.fileName}`,
                     {
                         headers: createHeaders(),
                         credentials: 'omit'
-                    }
+                    },
+                    8000 // Timeout de 8 segundos
                 );
 
                 if (response.ok) {
@@ -281,6 +301,15 @@
                 }
             } catch (error) {
                 handleError("Error al cargar:", error);
+                
+                // Si el error es de autenticación, borrar el token
+                if (error.message.includes('Bad credentials') || error.message.includes('401')) {
+                    if (storageAvailable) {
+                        localStorage.removeItem('github_token');
+                    }
+                    githubToken = null;
+                    showStatus("Token inválido. Por favor ingresa uno nuevo.", "error");
+                }
             } finally {
                 enableButtons();
             }
@@ -294,6 +323,11 @@
                 return;
             }
 
+            if (!isOnline) {
+                showStatus("Error: No hay conexión a internet", "error");
+                return;
+            }
+
             if (!githubToken) {
                 await requestToken();
                 if (!githubToken) return;
@@ -303,47 +337,87 @@
                 showStatus("Guardando cambios...", "info");
                 disableButtons();
 
-                // Obtener SHA actual
-                const shaResponse = await fetch(
-                    `https://api.github.com/repos/${CONFIG.repoOwner}/${CONFIG.repoName}/contents/${CONFIG.fileName}`,
-                    {
-                        headers: createHeaders(),
-                        credentials: 'omit'
-                    }
-                );
-
+                // 1. Obtener SHA actual con manejo de timeout
                 let latestSha = currentSha;
-                if (shaResponse.ok) {
-                    const fileData = await shaResponse.json();
-                    latestSha = fileData.sha;
-                } else if (shaResponse.status !== 404) {
-                    throw new Error(await shaResponse.text());
-                }
+                try {
+                    const shaResponse = await fetchWithTimeout(
+                        `https://api.github.com/repos/${CONFIG.repoOwner}/${CONFIG.repoName}/contents/${CONFIG.fileName}`,
+                        {
+                            headers: createHeaders(),
+                            credentials: 'omit'
+                        },
+                        5000 // Timeout de 5 segundos
+                    );
 
-                // Guardar cambios
-                const saveResponse = await fetch(
-                    `https://api.github.com/repos/${CONFIG.repoOwner}/${CONFIG.repoName}/contents/${CONFIG.fileName}`,
-                    {
-                        method: 'PUT',
-                        headers: createHeaders(),
-                        body: JSON.stringify({
-                            message: `Actualización CSV desde editor - ${new Date().toLocaleString()}`,
-                            content: encodeBase64(content),
-                            sha: latestSha
-                        })
+                    if (shaResponse.ok) {
+                        const fileData = await shaResponse.json();
+                        latestSha = fileData.sha;
+                    } else if (shaResponse.status !== 404) {
+                        throw new Error(await shaResponse.text());
                     }
-                );
-
-                if (saveResponse.ok) {
-                    const result = await saveResponse.json();
-                    currentSha = result.content.sha;
-                    showStatus("¡CSV guardado correctamente en GitHub!", "success");
-                } else {
-                    const errorData = await saveResponse.json();
-                    throw new Error(errorData.message || "Error desconocido al guardar");
+                } catch (shaError) {
+                    console.warn("Error al obtener SHA:", shaError);
+                    // Continuar con el último SHA conocido si hay error
                 }
+
+                // 2. Guardar cambios con reintentos
+                let retries = 3;
+                let lastError = null;
+                
+                while (retries > 0) {
+                    try {
+                        const saveResponse = await fetchWithTimeout(
+                            `https://api.github.com/repos/${CONFIG.repoOwner}/${CONFIG.repoName}/contents/${CONFIG.fileName}`,
+                            {
+                                method: 'PUT',
+                                headers: createHeaders(),
+                                body: JSON.stringify({
+                                    message: `Actualización CSV desde editor - ${new Date().toLocaleString()}`,
+                                    content: encodeBase64(content),
+                                    sha: latestSha
+                                })
+                            },
+                            10000 // Timeout de 10 segundos
+                        );
+
+                        if (saveResponse.ok) {
+                            const result = await saveResponse.json();
+                            currentSha = result.content.sha;
+                            showStatus("¡CSV guardado correctamente en GitHub!", "success");
+                            return; // Salir del bucle si es exitoso
+                        } else {
+                            const errorData = await saveResponse.json();
+                            lastError = new Error(errorData.message || "Error desconocido al guardar");
+                            
+                            // Si es error de autenticación, no reintentar
+                            if (saveResponse.status === 401 || saveResponse.status === 403) {
+                                break;
+                            }
+                        }
+                    } catch (error) {
+                        lastError = error;
+                    }
+                    
+                    retries--;
+                    if (retries > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 2000)); // Esperar 2 segundos
+                        showStatus(`Reintentando guardado... (${retries} intentos restantes)`, "warning");
+                    }
+                }
+
+                if (lastError) throw lastError;
+
             } catch (error) {
                 handleError("Error al guardar:", error);
+                
+                // Si el error es de autenticación, borrar el token
+                if (error.message.includes('Bad credentials') || error.message.includes('401')) {
+                    if (storageAvailable) {
+                        localStorage.removeItem('github_token');
+                    }
+                    githubToken = null;
+                    showStatus("Token inválido. Por favor ingresa uno nuevo.", "error");
+                }
             } finally {
                 enableButtons();
             }
@@ -419,7 +493,7 @@
                         if (typeof value === 'string' && (value.includes(',') || value.includes('\n') || value.includes('"'))) {
                             return `"${value.replace(/"/g, '""')}"`;
                         }
-                        return value;
+                        return value !== undefined ? value : '';
                     }).join(',')
                 );
                 return [headers.join(','), ...rows].join('\n');
@@ -465,14 +539,31 @@
 
         function handleError(context, error) {
             console.error(context, error);
-            showStatus(`${context.split(':')[0]}: ${error.message}`, "error");
             
-            // Si el error es de autenticación, borrar el token inválido
-            if (error.message.includes('Bad credentials') && storageAvailable) {
-                localStorage.removeItem('github_token');
-                githubToken = null;
-                showStatus("Token inválido. Por favor ingresa uno nuevo.", "error");
+            let userMessage = error.message;
+            
+            if (error.message.includes('Failed to fetch')) {
+                userMessage = "Error de conexión. Verifica tu internet o bloqueadores de contenido.";
+            } else if (error.message.includes('Timeout')) {
+                userMessage = "Tiempo de espera agotado. GitHub podría estar lento.";
+            } else if (error.message.includes('401') || error.message.includes('403')) {
+                userMessage = "Error de autenticación. Token inválido o sin permisos.";
+            } else if (error.message.includes('404')) {
+                userMessage = "Archivo no encontrado. Verifica la configuración.";
+            } else if (!isOnline) {
+                userMessage = "No hay conexión a internet. Conéctate para guardar cambios.";
             }
+            
+            showStatus(`${userMessage}`, "error");
+        }
+
+        function fetchWithTimeout(url, options, timeout = 8000) {
+            return Promise.race([
+                fetch(url, options),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Timeout: La solicitud tardó demasiado')), timeout)
+                )
+            ]);
         }
     </script>
 </body>
