@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editor CSV con GitHub API</title>
+    <title>Editor de Inventario CSV</title>
     <link rel="icon" href="data:,">
     <style>
         :root {
@@ -11,14 +11,14 @@
             --error: #f85149;
             --success: #3fb950;
             --warning: #d29922;
-            --text: #e6edf3;
-            --bg: #0d1117;
-            --bg-secondary: #161b22;
-            --border: #30363d;
+            --text: #333;
+            --bg: #f6f8fa;
+            --bg-secondary: #ffffff;
+            --border: #d0d7de;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 2rem;
             line-height: 1.6;
@@ -39,7 +39,7 @@
         }
         textarea {
             width: 100%;
-            min-height: 300px;
+            min-height: 200px;
             padding: 1rem;
             border: 1px solid var(--border);
             border-radius: 6px;
@@ -71,13 +71,14 @@
             border-color: #3fb950;
         }
         button:disabled {
-            background-color: #1a5322;
+            background-color: #94d3a2;
             cursor: not-allowed;
-            opacity: 0.5;
+            opacity: 0.7;
         }
         button.secondary {
             background-color: var(--bg-secondary);
             color: var(--text);
+            border: 1px solid var(--border);
         }
         #status {
             padding: 1rem;
@@ -87,91 +88,131 @@
             border: 1px solid transparent;
         }
         .success {
-            background-color: rgba(46, 160, 67, 0.1);
+            background-color: #dcffe4;
             color: var(--success);
-            border-color: rgba(46, 160, 67, 0.4);
+            border: 1px solid #bef5cb;
         }
         .error {
-            background-color: rgba(248, 81, 73, 0.1);
+            background-color: #ffdce0;
             color: var(--error);
-            border-color: rgba(248, 81, 73, 0.4);
+            border: 1px solid #fdaeb7;
         }
         .warning {
-            background-color: rgba(187, 128, 9, 0.1);
-            color: var(--warning);
-            border-color: rgba(187, 128, 9, 0.4);
+            background-color: #fff5b1;
+            color: #735c0f;
+            border: 1px solid #f9c513;
         }
         .info {
-            background-color: rgba(56, 139, 253, 0.1);
-            color: #58a6ff;
-            border-color: rgba(56, 139, 253, 0.4);
+            background-color: #f1f8ff;
+            color: #0366d6;
+            border: 1px solid #c8e1ff;
         }
-        footer {
-            margin-top: 3rem;
-            text-align: center;
-            color: #7d8590;
-            font-size: 0.9rem;
-            border-top: 1px solid var(--border);
-            padding-top: 1.5rem;
-        }
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(13, 17, 23, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        .modal-content {
+        .form-container {
             background-color: var(--bg-secondary);
-            padding: 2rem;
+            padding: 1.5rem;
             border-radius: 6px;
-            width: 90%;
-            max-width: 500px;
             border: 1px solid var(--border);
+            margin-bottom: 1rem;
         }
-        .modal-actions {
+        .form-row {
             display: flex;
-            justify-content: flex-end;
-            gap: 0.5rem;
-            margin-top: 1rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1rem;
         }
-        input[type="password"] {
+        .form-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        input, select {
             width: 100%;
             padding: 0.5rem;
-            margin: 0.5rem 0;
-            background-color: var(--bg);
             border: 1px solid var(--border);
-            color: var(--text);
             border-radius: 4px;
+            font-size: 14px;
         }
-        @media (max-width: 600px) {
-            body {
-                padding: 1rem;
-            }
-            .button-group {
+        .view-toggle {
+            text-align: center;
+            margin: 1rem 0;
+        }
+        .view-toggle button {
+            background: none;
+            border: none;
+            color: var(--primary);
+            cursor: pointer;
+            text-decoration: underline;
+            font-size: 14px;
+        }
+        @media (max-width: 768px) {
+            .form-row {
                 flex-direction: column;
-            }
-            button {
-                width: 100%;
             }
         }
     </style>
 </head>
 <body>
-    <h1>Editor CSV con GitHub API</h1>
+    <h1>Editor de Inventario CSV</h1>
     
     <div class="editor-container">
-        <textarea id="dataInput" placeholder="Nombre,Apellido,Edad\nJuan,Perez,25\nMaria,Gomez,30"></textarea>
+        <div class="view-toggle">
+            <button id="toggleView">Mostrar formulario de entrada</button>
+        </div>
+        
+        <div id="formContainer" class="form-container" style="display: none;">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="modelo">Modelo</label>
+                    <input type="text" id="modelo" placeholder="Ej: ABC-123">
+                </div>
+                <div class="form-group">
+                    <label for="serial">Serial</label>
+                    <input type="text" id="serial" placeholder="Ej: SN123456">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="cliente">Cliente</label>
+                    <input type="text" id="cliente" placeholder="Nombre del cliente">
+                </div>
+                <div class="form-group">
+                    <label for="parte">Parte</label>
+                    <input type="text" id="parte" placeholder="Número de parte">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="estado">Estado</label>
+                    <select id="estado">
+                        <option value="Nuevo">Nuevo</option>
+                        <option value="Usado">Usado</option>
+                        <option value="Reparado">Reparado</option>
+                        <option value="Dañado">Dañado</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="fecha">Fecha</label>
+                    <input type="date" id="fecha">
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button id="addRow">Agregar al CSV</button>
+                <button id="clearForm" class="secondary">Limpiar formulario</button>
+            </div>
+        </div>
+        
+        <textarea id="dataInput" placeholder="Modelo,Serial,Cliente,Parte,Estado,Fecha\nEjemplo,SN123456,Cliente S.A.,P-1001,Nuevo,2023-11-15"></textarea>
         
         <div class="button-group">
             <button id="loadButton">Cargar CSV</button>
             <button id="saveButton">Guardar CSV</button>
-            <button id="convertJsonButton" class="secondary">Convertir JSON</button>
             <button id="clearButton" class="secondary">Limpiar</button>
         </div>
         
@@ -179,28 +220,34 @@
             Editor listo. Ingresa tu token de GitHub cuando se solicite.
         </div>
     </div>
-    
-    <footer>
-        <p>Esta aplicación guarda los datos directamente en tu repositorio de GitHub.</p>
-        <p>Necesitarás un token de acceso con permisos "repo".</p>
-    </footer>
 
     <script>
-        // Configuración - REEMPLAZAR CON TUS DATOS
+        // Configuración
         const CONFIG = {
             repoOwner: 'FredyNes',
             repoName: 'Inv3',
-            fileName: 'datos.csv',
-            defaultContent: 'Nombre,Apellido,Edad,Email\nEjemplo,Usuario,30,ejemplo@test.com'
+            fileName: 'inventario.csv',
+            defaultContent: 'Modelo,Serial,Cliente,Parte,Estado,Fecha'
         };
 
         // Elementos del DOM
         const dataInput = document.getElementById('dataInput');
         const loadButton = document.getElementById('loadButton');
         const saveButton = document.getElementById('saveButton');
-        const convertJsonButton = document.getElementById('convertJsonButton');
         const clearButton = document.getElementById('clearButton');
         const statusDiv = document.getElementById('status');
+        const toggleView = document.getElementById('toggleView');
+        const formContainer = document.getElementById('formContainer');
+        const addRow = document.getElementById('addRow');
+        const clearForm = document.getElementById('clearForm');
+
+        // Campos del formulario
+        const modeloInput = document.getElementById('modelo');
+        const serialInput = document.getElementById('serial');
+        const clienteInput = document.getElementById('cliente');
+        const parteInput = document.getElementById('parte');
+        const estadoInput = document.getElementById('estado');
+        const fechaInput = document.getElementById('fecha');
 
         // Estado de la aplicación
         let currentSha = null;
@@ -210,15 +257,13 @@
 
         // Inicialización
         document.addEventListener('DOMContentLoaded', () => {
+            // Establecer fecha actual por defecto
+            fechaInput.valueAsDate = new Date();
+            
             checkStorageAvailability();
             setupConnectivityMonitoring();
             loadToken();
             setupEventListeners();
-            
-            // Verificar si fetch está disponible
-            if (typeof window.fetch === 'undefined') {
-                showStatus("Advertencia: Parece que tienes un bloqueador de contenido que puede interferir", "warning");
-            }
         });
 
         // Funciones principales
@@ -229,7 +274,6 @@
                 localStorage.removeItem(testKey);
             } catch (e) {
                 storageAvailable = false;
-                console.warn('Almacenamiento local no disponible:', e);
                 showStatus("Advertencia: Los ajustes no se guardarán entre sesiones", "warning");
             }
         }
@@ -251,7 +295,6 @@
                 githubToken = localStorage.getItem('github_token');
                 if (githubToken) {
                     showStatus("Token cargado desde almacenamiento local", "success");
-                    loadFileContent();
                 }
             }
         }
@@ -259,8 +302,65 @@
         function setupEventListeners() {
             loadButton.addEventListener('click', loadFileContent);
             saveButton.addEventListener('click', saveFileContent);
-            convertJsonButton.addEventListener('click', convertJsonToCsv);
             clearButton.addEventListener('click', clearEditor);
+            toggleView.addEventListener('click', toggleFormView);
+            addRow.addEventListener('click', addFormDataToCSV);
+            clearForm.addEventListener('click', clearFormInputs);
+        }
+
+        function toggleFormView() {
+            const isVisible = formContainer.style.display === 'block';
+            formContainer.style.display = isVisible ? 'none' : 'block';
+            toggleView.textContent = isVisible ? 'Mostrar formulario de entrada' : 'Ocultar formulario';
+        }
+
+        function addFormDataToCSV() {
+            // Validar campos obligatorios
+            if (!modeloInput.value.trim() || !serialInput.value.trim()) {
+                showStatus("Modelo y Serial son campos obligatorios", "error");
+                return;
+            }
+
+            // Crear la nueva fila CSV
+            const newRow = [
+                modeloInput.value.trim(),
+                serialInput.value.trim(),
+                clienteInput.value.trim(),
+                parteInput.value.trim(),
+                estadoInput.value,
+                fechaInput.value
+            ].map(field => {
+                // Escapar comas y comillas en los campos
+                if (typeof field === 'string' && (field.includes(',') || field.includes('"'))) {
+                    return `"${field.replace(/"/g, '""')}"`;
+                }
+                return field;
+            }).join(',');
+
+            // Agregar al contenido existente
+            let currentContent = dataInput.value.trim();
+            if (currentContent === '' || currentContent === CONFIG.defaultContent) {
+                currentContent = CONFIG.defaultContent;
+            }
+
+            dataInput.value = currentContent + (currentContent.endsWith('\n') ? '' : '\n') + newRow;
+            showStatus("Registro agregado al CSV", "success");
+            
+            // Limpiar el formulario (excepto estado y fecha)
+            modeloInput.value = '';
+            serialInput.value = '';
+            clienteInput.value = '';
+            parteInput.value = '';
+            fechaInput.valueAsDate = new Date();
+        }
+
+        function clearFormInputs() {
+            modeloInput.value = '';
+            serialInput.value = '';
+            clienteInput.value = '';
+            parteInput.value = '';
+            estadoInput.value = 'Nuevo';
+            fechaInput.valueAsDate = new Date();
         }
 
         async function loadFileContent() {
@@ -281,10 +381,6 @@
             try {
                 showStatus("Cargando archivo CSV...", "info");
                 disableButtons();
-
-                if (typeof window.fetch === 'undefined') {
-                    throw new Error("La función fetch no está disponible. ¿Tienes un bloqueador de contenido?");
-                }
 
                 const response = await fetchWithTimeout(
                     `https://api.github.com/repos/${CONFIG.repoOwner}/${CONFIG.repoName}/contents/${CONFIG.fileName}`,
@@ -334,9 +430,6 @@
                     localStorage.removeItem('github_token');
                 }
                 githubToken = null;
-            } else if (error.message.includes('fetch')) {
-                errorMessage = "Problema con la función fetch. ¿Tienes un bloqueador de contenido activado?";
-                errorType = "warning";
             }
             
             showStatus(errorMessage, errorType);
@@ -346,7 +439,7 @@
         async function saveFileContent() {
             const content = dataInput.value.trim();
             
-            if (!content) {
+            if (!content || content === CONFIG.defaultContent) {
                 showStatus("El contenido no puede estar vacío", "error");
                 return;
             }
@@ -397,7 +490,7 @@
                                 method: 'PUT',
                                 headers: createHeaders(),
                                 body: JSON.stringify({
-                                    message: `Actualización CSV desde editor - ${new Date().toLocaleString()}`,
+                                    message: `Actualización de inventario - ${new Date().toLocaleString()}`,
                                     content: encodeBase64(content),
                                     sha: latestSha
                                 })
@@ -408,7 +501,7 @@
                         if (saveResponse.ok) {
                             const result = await saveResponse.json();
                             currentSha = result.content.sha;
-                            showStatus("¡CSV guardado correctamente en GitHub!", "success");
+                            showStatus("¡Inventario guardado correctamente en GitHub!", "success");
                             return;
                         } else {
                             const errorData = await saveResponse.json();
@@ -462,20 +555,9 @@
             showStatus(errorMessage, errorType);
         }
 
-        function convertJsonToCsv() {
-            try {
-                const jsonData = JSON.parse(dataInput.value.trim());
-                const csvContent = jsonToCsv(jsonData);
-                dataInput.value = csvContent;
-                showStatus("JSON convertido a CSV correctamente", "success");
-            } catch (error) {
-                showStatus("Error al convertir: El contenido no es JSON válido", "error");
-            }
-        }
-
         function clearEditor() {
-            if (confirm("¿Estás seguro de que quieres limpiar el editor?")) {
-                dataInput.value = '';
+            if (confirm("¿Estás seguro de que quieres limpiar el editor? Se perderán todos los datos no guardados.")) {
+                dataInput.value = CONFIG.defaultContent;
                 showStatus("Editor limpiado", "info");
             }
         }
@@ -485,15 +567,15 @@
                 const modal = document.createElement('div');
                 modal.className = 'modal';
                 modal.innerHTML = `
-                    <div class="modal-content">
+                    <div style="background: white; padding: 2rem; border-radius: 8px; max-width: 500px;">
                         <h2 style="margin-top: 0;">Autenticación requerida</h2>
-                        <p>Ingresa tu token de acceso GitHub con permisos "repo":</p>
-                        <input type="password" id="tokenInput" placeholder="ghp_...">
-                        <div class="modal-actions">
-                            <button id="cancelToken" class="secondary">Cancelar</button>
-                            <button id="submitToken">Guardar Token</button>
+                        <p>Ingresa tu token de acceso GitHub (con permisos repo):</p>
+                        <input type="password" id="tokenInput" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem;">
+                        <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+                            <button id="cancelToken" style="background: #f6f8fa; color: #24292e; border: 1px solid #d0d7de; padding: 0.5rem 1rem; border-radius: 4px;">Cancelar</button>
+                            <button id="submitToken" style="background: var(--primary); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px;">Guardar Token</button>
                         </div>
-                        <p><small>Crea un token en <a href="https://github.com/settings/tokens" target="_blank" style="color: #58a6ff;">GitHub Settings</a></small></p>
+                        <p><small>Crea un token en <a href="https://github.com/settings/tokens" target="_blank">GitHub Settings</a></small></p>
                     </div>
                 `;
                 
@@ -521,26 +603,6 @@
         }
 
         // Funciones auxiliares
-        function jsonToCsv(data) {
-            if (typeof data === 'string') return data;
-            
-            if (Array.isArray(data) && data.length > 0) {
-                const headers = Object.keys(data[0]);
-                const rows = data.map(obj => 
-                    headers.map(header => {
-                        const value = obj[header];
-                        if (typeof value === 'string' && (value.includes(',') || value.includes('\n') || value.includes('"'))) {
-                            return `"${value.replace(/"/g, '""')}"`;
-                        }
-                        return value !== undefined ? value : '';
-                    }).join(',')
-                );
-                return [headers.join(','), ...rows].join('\n');
-            }
-            
-            return "No se pudo convertir el JSON a CSV";
-        }
-
         function createHeaders() {
             return {
                 'Accept': 'application/vnd.github.v3+json',
@@ -565,15 +627,17 @@
         function disableButtons() {
             loadButton.disabled = true;
             saveButton.disabled = true;
-            convertJsonButton.disabled = true;
             clearButton.disabled = true;
+            addRow.disabled = true;
+            clearForm.disabled = true;
         }
 
         function enableButtons() {
             loadButton.disabled = false;
             saveButton.disabled = false;
-            convertJsonButton.disabled = false;
             clearButton.disabled = false;
+            addRow.disabled = false;
+            clearForm.disabled = false;
         }
 
         function fetchWithTimeout(url, options, timeout = 10000) {
