@@ -3,114 +3,195 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guardar datos en TXT</title>
+    <title>Guardar Datos en TXT</title>
+    <link rel="icon" href="data:,"> <!-- Previene solicitud de favicon -->
     <style>
         body {
             font-family: Arial, sans-serif;
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
         }
         textarea {
             width: 100%;
-            height: 150px;
-            margin-bottom: 10px;
+            height: 200px;
+            margin: 15px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
         }
         button {
-            padding: 10px 15px;
-            background-color: #28a745;
+            background-color: #2ea44f;
             color: white;
             border: none;
+            padding: 10px 20px;
+            font-size: 16px;
             border-radius: 4px;
             cursor: pointer;
+            display: block;
+            margin: 0 auto;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #22863a;
         }
         #status {
-            margin-top: 10px;
+            margin: 20px 0;
             padding: 10px;
             border-radius: 4px;
+            text-align: center;
         }
         .success {
             background-color: #d4edda;
             color: #155724;
+            border: 1px solid #c3e6cb;
         }
         .error {
             background-color: #f8d7da;
             color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #e2e3e5;
+            color: #383d41;
+            border: 1px solid #d6d8db;
         }
     </style>
 </head>
 <body>
-    <h1>Guardar datos en archivo TXT</h1>
-    <p>Ingresa el contenido que deseas guardar:</p>
+    <h1>Guardar Datos en Archivo TXT</h1>
+    <p>Ingresa el contenido que deseas guardar en el repositorio:</p>
     
     <textarea id="dataInput" placeholder="Escribe aquí tu contenido..."></textarea>
     <button id="saveButton">Guardar en TXT</button>
     
-    <div id="status"></div>
+    <div id="status" class="info">Listo para guardar datos</div>
     
     <script>
-        document.getElementById('saveButton').addEventListener('click', async function() {
-            const content = document.getElementById('dataInput').value;
-            const filename = 'datos.txt';
-            const repoOwner = 'FredyNes'; // Cambia esto
-            const repoName = 'Inv3'; // Cambia esto
-            const token = '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'; // Cambia esto
+        document.addEventListener('DOMContentLoaded', function() {
+            const saveButton = document.getElementById('saveButton');
+            const dataInput = document.getElementById('dataInput');
+            const statusDiv = document.getElementById('status');
             
-            if (!content) {
-                showStatus('Por favor ingresa algún contenido', 'error');
-                return;
-            }
+            // Configuración - REEMPLAZA ESTOS VALORES
+            const config = {
+                repoOwner: 'FredyNes',   // Ej: "midudev"
+                repoName: 'Inv3',       // Ej: "mi-repositorio"
+                fileName: 'datos.txt',             // Archivo a crear/modificar
+                defaultContent: 'Este es el contenido inicial del archivo.\nPuedes editarlo desde la página web.'
+            };
             
-            try {
-                // Verificar si el archivo ya existe
-                let sha = null;
+            // Mostrar contenido actual al cargar la página
+            loadCurrentContent();
+            
+            saveButton.addEventListener('click', saveContent);
+            
+            async function loadCurrentContent() {
                 try {
-                    const existingFile = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/${filename}`, {
+                    statusDiv.textContent = "Cargando contenido actual...";
+                    statusDiv.className = "info";
+                    
+                    const response = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${config.fileName}`, {
                         headers: {
-                            'Authorization': `token ${token}`,
-                            'Accept': 'application/vnd.github.v3+json'
-                        }
+                            'Accept': 'application/vnd.github.v3+json',
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'omit'
                     });
                     
-                    if (existingFile.ok) {
-                        const fileData = await existingFile.json();
-                        sha = fileData.sha;
+                    if (response.ok) {
+                        const data = await response.json();
+                        const content = atob(data.content.replace(/\s/g, ''));
+                        dataInput.value = content;
+                        statusDiv.textContent = "Contenido cargado correctamente";
+                        statusDiv.className = "success";
+                    } else if (response.status === 404) {
+                        dataInput.value = config.defaultContent;
+                        statusDiv.textContent = "Archivo no existe, se usará contenido por defecto";
+                        statusDiv.className = "info";
+                    } else {
+                        throw new Error(`Error ${response.status}: ${response.statusText}`);
                     }
-                } catch (e) {
-                    console.log('Archivo no existe o error al verificarlo');
+                } catch (error) {
+                    showError("Error al cargar contenido: " + error.message);
+                }
+            }
+            
+            async function saveContent() {
+                const content = dataInput.value.trim();
+                
+                if (!content) {
+                    showError("Por favor ingresa algún contenido");
+                    return;
                 }
                 
-                // Crear o actualizar el archivo
-                const response = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/${filename}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `token ${token}`,
-                        'Accept': 'application/vnd.github.v3+json',
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        message: 'Actualización de datos desde la página web',
-                        content: btoa(unescape(encodeURIComponent(content))),
-                        sha: sha
-                    })
-                });
-                
-                if (response.ok) {
-                    showStatus('Datos guardados correctamente en GitHub', 'success');
-                } else {
-                    const error = await response.json();
-                    showStatus(`Error al guardar: ${error.message}`, 'error');
+                try {
+                    statusDiv.textContent = "Guardando...";
+                    statusDiv.className = "info";
+                    
+                    // 1. Primero obtenemos el SHA del archivo existente (si existe)
+                    let sha = null;
+                    try {
+                        const existingFile = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${config.fileName}`, {
+                            headers: {
+                                'Accept': 'application/vnd.github.v3+json',
+                                'Content-Type': 'application/json'
+                            },
+                            credentials: 'omit'
+                        });
+                        
+                        if (existingFile.ok) {
+                            const fileData = await existingFile.json();
+                            sha = fileData.sha;
+                        }
+                    } catch (e) {
+                        console.log("Archivo no existe o error al verificarlo");
+                    }
+                    
+                    // 2. Enviamos la solicitud para crear/actualizar el archivo
+                    const response = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${config.fileName}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Accept': 'application/vnd.github.v3+json',
+                            'Content-Type': 'application/json',
+                            'Authorization': 'token ' + prompt("Ingresa tu token de acceso GitHub (con permisos repo):")
+                        },
+                        body: JSON.stringify({
+                            message: 'Actualización desde la página web',
+                            content: btoa(unescape(encodeURIComponent(content))),
+                            sha: sha
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        statusDiv.textContent = "¡Datos guardados correctamente en GitHub!";
+                        statusDiv.className = "success";
+                    } else {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || "Error desconocido al guardar");
+                    }
+                } catch (error) {
+                    showError("Error al guardar: " + error.message);
                 }
-            } catch (error) {
-                showStatus(`Error: ${error.message}`, 'error');
+            }
+            
+            function showError(message) {
+                statusDiv.textContent = message;
+                statusDiv.className = "error";
+                console.error(message);
             }
         });
-        
-        function showStatus(message, type) {
-            const statusDiv = document.getElementById('status');
-            statusDiv.textContent = message;
-            statusDiv.className = type;
-        }
     </script>
+    
+    <footer style="margin-top: 30px; text-align: center; color: #666; font-size: 14px;">
+        <p>Esta página guarda datos directamente en un repositorio GitHub usando la API.</p>
+        <p>Necesitarás un token de acceso con permisos "repo".</p>
+    </footer>
 </body>
 </html>
